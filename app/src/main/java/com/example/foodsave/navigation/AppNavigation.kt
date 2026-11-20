@@ -1,33 +1,59 @@
 package com.example.foodsave.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.foodsave.data.FoodItem
+import com.example.foodsave.firebase.AuthManager
+import com.example.foodsave.pages.AddFoodScreen
 import com.example.foodsave.pages.DashboardScreen
 import com.example.foodsave.pages.IntroScreen
 import com.example.foodsave.pages.LoginScreen
+import com.example.foodsave.pages.PantryScreen
 import com.example.foodsave.pages.RegisterScreen
+import com.example.foodsave.viewmodel.FoodViewModel
 
-// Defines the app's navigation screens
+// App screen routes
 sealed class Screen(val route: String) {
     object Intro : Screen("intro")
     object Login : Screen("login")
     object Register : Screen("register")
     object Dashboard : Screen("dashboard")
+    object Pantry : Screen("pantry")
+    object AddFood : Screen("add_food")
+    object EditFood : Screen("edit_food")
 }
 
 @Composable
 fun AppNavigation() {
 
-    // navigation controller
     val navController = rememberNavController()
 
-    // Sets up the app's navigation
+    // Create auth manager
+    val authManager = remember {
+        AuthManager()
+    }
+
+    // Check login status
+    val startDestination = remember {
+        if (authManager.isUserLoggedIn()) {
+            Screen.Dashboard.route
+        } else {
+            Screen.Intro.route
+        }
+    }
+
+    // Shared ViewModel
+    val foodViewModel: FoodViewModel = viewModel()
+
     NavHost(
         navController = navController,
-        startDestination = Screen.Intro.route
+        startDestination = startDestination
     ) {
+
         // Intro screen
         composable(Screen.Intro.route) {
             IntroScreen(
@@ -41,12 +67,17 @@ fun AppNavigation() {
         composable(Screen.Login.route) {
             LoginScreen(
                 onLoginSuccess = {
+                    foodViewModel.refreshFood()
+
                     navController.navigate(Screen.Dashboard.route) {
-                        popUpTo(Screen.Login.route) {
+                        // Clear auth screens
+                        popUpTo(navController.graph.id) {
                             inclusive = true
                         }
+                        launchSingleTop = true
                     }
                 },
+
                 onRegisterClick = {
                     navController.navigate(Screen.Register.route)
                 }
@@ -57,12 +88,17 @@ fun AppNavigation() {
         composable(Screen.Register.route) {
             RegisterScreen(
                 onRegisterSuccess = {
+                    foodViewModel.refreshFood()
+
                     navController.navigate(Screen.Dashboard.route) {
-                        popUpTo(Screen.Register.route) {
+                        // Clear auth screens
+                        popUpTo(navController.graph.id) {
                             inclusive = true
                         }
+                        launchSingleTop = true
                     }
                 },
+
                 onLoginClick = {
                     navController.navigate(Screen.Login.route)
                 }
@@ -71,13 +107,87 @@ fun AppNavigation() {
 
         // Dashboard screen
         composable(Screen.Dashboard.route) {
+
+            // Refresh food data
+            androidx.compose.runtime.LaunchedEffect(Unit) {
+                foodViewModel.refreshFood()
+            }
+
             DashboardScreen(
+                foodViewModel = foodViewModel,
+
+                onOpenPantry = {
+                    navController.navigate(Screen.Pantry.route)
+                },
+
+                onAddFood = {
+                    navController.navigate(Screen.AddFood.route)
+                },
+
                 onLogout = {
-                    navController.navigate(Screen.Login.route) {
-                        popUpTo(0)
+                    // Firebase logout
+                    authManager.logout()
+
+                    // Return to intro
+                    navController.navigate(Screen.Intro.route) {
+                        popUpTo(navController.graph.id) {
+                            inclusive = true
+                        }
+                        launchSingleTop = true
                     }
                 }
             )
+        }
+
+        // Pantry screen
+        composable(Screen.Pantry.route) {
+            PantryScreen(
+                onAddFood = {
+                    navController.navigate(Screen.AddFood.route)
+                },
+
+                onEditFood = { food: FoodItem ->
+                    navController.currentBackStackEntry
+                        ?.savedStateHandle
+                        ?.set("selectedFood", food)
+
+                    navController.navigate(Screen.EditFood.route)
+                },
+
+                foodViewModel = foodViewModel
+            )
+        }
+
+        // Add food screen
+        composable(Screen.AddFood.route) {
+            AddFoodScreen(
+                onBack = {
+                    navController.popBackStack()
+                },
+
+                foodViewModel = foodViewModel
+            )
+        }
+
+        // Edit food screen
+        composable(Screen.EditFood.route) {
+            val selectedFood: FoodItem? =
+                navController.previousBackStackEntry
+                    ?.savedStateHandle
+                    ?.get<FoodItem>("selectedFood")
+
+            if (selectedFood != null) {
+
+                AddFoodScreen(
+                    onBack = {
+                        navController.popBackStack()
+                    },
+
+                    foodViewModel = foodViewModel,
+
+                    existingFood = selectedFood
+                )
+            }
         }
     }
 }
