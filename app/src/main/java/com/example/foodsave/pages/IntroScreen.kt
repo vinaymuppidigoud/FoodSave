@@ -22,11 +22,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.foodsave.R
 
-// colour palette
+// Colour palette
 private val FoodSaveDarkGreen = Color(0xFF075B2A)
 private val FoodSaveGreen = Color(0xFF35A936)
 private val FoodSaveCream = Color(0xFFF8FCF4)
@@ -37,7 +38,7 @@ fun IntroScreen(
     onGetStarted: () -> Unit
 ) {
 
-    // screen layout
+    // Main screen layout
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -74,7 +75,7 @@ fun IntroScreen(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // app description
+        // App description
         Text(
             text = "Plan your food. Track expiry dates. Reduce food waste.",
             style = MaterialTheme.typography.bodyMedium.copy(
@@ -118,5 +119,21 @@ fun IntroScreen(
                 letterSpacing = 0.2.sp
             )
         }
+    }
+}
+
+// Android Studio Preview
+@Preview(
+    showBackground = true,
+    showSystemUi = true,
+    name = "FoodSave Intro Screen"
+)
+@Composable
+fun IntroScreenPreview() {
+
+    MaterialTheme {
+        IntroScreen(
+            onGetStarted = {}
+        )
     }
 }

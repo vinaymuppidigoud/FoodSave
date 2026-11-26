@@ -35,20 +35,21 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.foodsave.R
 import com.example.foodsave.viewmodel.AuthViewModel
 
-// colour palette
+// colours
 private val FoodSaveDarkGreen = Color(0xFF075B2A)
 private val FoodSaveGreen = Color(0xFF35A936)
 private val FoodSaveCream = Color(0xFFF8FCF4)
 private val FoodSaveText = Color(0xFF173B25)
 private val FoodSaveError = Color(0xFFB3261E)
 
-// Register screen
+// Main Register Screen
 @Composable
 fun RegisterScreen(
     onRegisterSuccess: () -> Unit,
@@ -61,11 +62,75 @@ fun RegisterScreen(
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
 
-    // Get authentication state
+    // Observe authentication state from AuthViewModel
     val errorMessage by authViewModel.errorMessage
     val isLoading by authViewModel.isLoading
 
-    // registration screen layout
+    // Display registration UI
+    RegisterScreenContent(
+        email = email,
+        password = password,
+        confirmPassword = confirmPassword,
+        errorMessage = errorMessage,
+        isLoading = isLoading,
+
+        onEmailChange = {
+            email = it
+        },
+
+        onPasswordChange = {
+            password = it
+        },
+
+        onConfirmPasswordChange = {
+            confirmPassword = it
+        },
+
+        onRegisterClick = {
+
+            // Validate email
+            if (email.isBlank()) {
+                return@RegisterScreenContent
+            }
+
+            // Validate password length
+            if (password.length < 6) {
+                return@RegisterScreenContent
+            }
+
+            // Check password confirmation
+            if (password != confirmPassword) {
+                return@RegisterScreenContent
+            }
+
+            // Register user using Firebase
+            authViewModel.register(
+                email = email,
+                password = password,
+                onSuccess = onRegisterSuccess
+            )
+        },
+
+        onLoginClick = onLoginClick
+    )
+}
+
+// Registration UI
+@Composable
+fun RegisterScreenContent(
+    email: String,
+    password: String,
+    confirmPassword: String,
+    errorMessage: String?,
+    isLoading: Boolean,
+    onEmailChange: (String) -> Unit,
+    onPasswordChange: (String) -> Unit,
+    onConfirmPasswordChange: (String) -> Unit,
+    onRegisterClick: () -> Unit,
+    onLoginClick: () -> Unit
+) {
+
+    // Registration screen layout
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -73,15 +138,12 @@ fun RegisterScreen(
             .padding(horizontal = 28.dp),
 
         horizontalAlignment = Alignment.CenterHorizontally,
-
         verticalArrangement = Arrangement.Center
     ) {
 
         // FoodSave logo
         Image(
-            painter = painterResource(
-                id = R.drawable.logo
-            ),
+            painter = painterResource(id = R.drawable.logo),
             contentDescription = "FoodSave Logo",
             modifier = Modifier.size(110.dp)
         )
@@ -116,17 +178,11 @@ fun RegisterScreen(
         // Email field
         OutlinedTextField(
             value = email,
-
-            onValueChange = {
-                email = it
-            },
-
+            onValueChange = onEmailChange,
             modifier = Modifier.fillMaxWidth(),
-
             label = {
                 Text("Email address")
             },
-
             leadingIcon = {
                 Icon(
                     imageVector = Icons.Default.Email,
@@ -134,11 +190,8 @@ fun RegisterScreen(
                     tint = FoodSaveGreen
                 )
             },
-
             singleLine = true,
-
             shape = RoundedCornerShape(14.dp),
-
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = FoodSaveGreen,
                 unfocusedBorderColor = Color(0xFFB8CDBB),
@@ -153,17 +206,11 @@ fun RegisterScreen(
         // Password field
         OutlinedTextField(
             value = password,
-
-            onValueChange = {
-                password = it
-            },
-
+            onValueChange = onPasswordChange,
             modifier = Modifier.fillMaxWidth(),
-
             label = {
                 Text("Password")
             },
-
             leadingIcon = {
                 Icon(
                     imageVector = Icons.Default.Lock,
@@ -171,13 +218,9 @@ fun RegisterScreen(
                     tint = FoodSaveGreen
                 )
             },
-
             visualTransformation = PasswordVisualTransformation(),
-
             singleLine = true,
-
             shape = RoundedCornerShape(14.dp),
-
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = FoodSaveGreen,
                 unfocusedBorderColor = Color(0xFFB8CDBB),
@@ -192,17 +235,11 @@ fun RegisterScreen(
         // Confirm password field
         OutlinedTextField(
             value = confirmPassword,
-
-            onValueChange = {
-                confirmPassword = it
-            },
-
+            onValueChange = onConfirmPasswordChange,
             modifier = Modifier.fillMaxWidth(),
-
             label = {
                 Text("Confirm Password")
             },
-
             leadingIcon = {
                 Icon(
                     imageVector = Icons.Default.Lock,
@@ -210,13 +247,9 @@ fun RegisterScreen(
                     tint = FoodSaveGreen
                 )
             },
-
             visualTransformation = PasswordVisualTransformation(),
-
             singleLine = true,
-
             shape = RoundedCornerShape(14.dp),
-
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = FoodSaveGreen,
                 unfocusedBorderColor = Color(0xFFB8CDBB),
@@ -232,7 +265,7 @@ fun RegisterScreen(
             Spacer(modifier = Modifier.height(10.dp))
 
             Text(
-                text = errorMessage ?: "",
+                text = errorMessage,
                 color = FoodSaveError,
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.fillMaxWidth()
@@ -243,34 +276,12 @@ fun RegisterScreen(
 
         // Register button
         Button(
-            onClick = {
-                if (email.isBlank()) {
-                    return@Button
-                }
-
-                if (password.length < 6) {
-                    return@Button
-                }
-
-                if (password != confirmPassword) {
-                    return@Button
-                }
-
-                authViewModel.register(
-                    email = email,
-                    password = password,
-                    onSuccess = onRegisterSuccess
-                )
-            },
-
+            onClick = onRegisterClick,
             enabled = !isLoading,
-
             modifier = Modifier
                 .fillMaxWidth()
                 .height(54.dp),
-
             shape = RoundedCornerShape(14.dp),
-
             colors = ButtonDefaults.buttonColors(
                 containerColor = FoodSaveDarkGreen,
                 contentColor = Color.White,
@@ -317,5 +328,31 @@ fun RegisterScreen(
                 fontSize = 14.sp
             )
         }
+    }
+}
+
+// Android Studio Preview
+@Preview(
+    showBackground = true,
+    showSystemUi = true,
+    name = "FoodSave Register Screen"
+)
+@Composable
+fun RegisterScreenPreview() {
+
+    MaterialTheme {
+
+        RegisterScreenContent(
+            email = "test@example.com",
+            password = "password123",
+            confirmPassword = "password123",
+            errorMessage = null,
+            isLoading = false,
+            onEmailChange = {},
+            onPasswordChange = {},
+            onConfirmPasswordChange = {},
+            onRegisterClick = {},
+            onLoginClick = {}
+        )
     }
 }

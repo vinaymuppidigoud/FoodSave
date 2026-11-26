@@ -98,4 +98,25 @@ dependencies {
 
     // Collects data based on screen lifecycle
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.6")
+
+    // CameraX Dependencies
+    implementation("androidx.camera:camera-core:1.4.2")
+    implementation("androidx.camera:camera-camera2:1.4.2")
+    implementation("androidx.camera:camera-lifecycle:1.4.2")
+    implementation("androidx.camera:camera-view:1.4.2")
+
+    // WorkManager
+    implementation("androidx.work:work-runtime-ktx:2.10.5")
+
+    // Firebase Firestore
+    implementation("com.google.firebase:firebase-firestore:26.0.2")
+
+    // Firebase Storage
+    implementation("com.google.firebase:firebase-storage:22.0.1")
+
+    // Coil Compose
+    implementation("io.coil-kt:coil-compose:2.7.0")
+
+    // CameraX ProcessCameraProvider
+    implementation("com.google.guava:guava:33.3.1-android")
 }

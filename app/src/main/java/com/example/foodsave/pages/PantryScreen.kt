@@ -1,6 +1,5 @@
 package com.example.foodsave.pages
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -16,19 +15,26 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
 import com.example.foodsave.data.FoodItem
 import com.example.foodsave.viewmodel.FoodViewModel
+import java.io.File
 import java.text.SimpleDateFormat
-import java.util.Date
+import java.util.Calendar
 import java.util.Locale
 
-// theme colors
+
+// App colors
 private val DarkGreen = Color(0xFF075B2A)
 private val Cream = Color(0xFFF8FCF4)
 private val TextGreen = Color(0xFF173B25)
 
+
+// Main Pantry Screen
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PantryScreen(
@@ -37,99 +43,148 @@ fun PantryScreen(
     foodViewModel: FoodViewModel = viewModel()
 ) {
 
-    // Observe food items
+    // Observe food items from ViewModel
     val foodItems by foodViewModel.foodItems.collectAsState()
 
     // Track search text
-    var searchText by remember { mutableStateOf("") }
+    var searchText by remember {
+        mutableStateOf("")
+    }
 
     // Track selected filter
-    var selectedFilter by remember { mutableStateOf("All") }
+    var selectedFilter by remember {
+        mutableStateOf("All")
+    }
 
-    // Filter pantry items
+    // Track selected food for delete confirmation
+    var foodToDelete by remember {
+        mutableStateOf<FoodItem?>(null)
+    }
+
+    // Filter pantry items based on search and expiry status
     val filteredItems = foodItems.filter { food ->
+
+        // Check whether food name matches search
         val matchesSearch = food.name.contains(
             searchText,
             ignoreCase = true
         )
 
+        // Get food expiry status
         val status = getExpiryStatus(food.expiryDate)
 
+        // Check selected filter
         val matchesFilter = when (selectedFilter) {
+
             "Fresh" -> status == "Fresh"
+
             "Expiring Soon" -> status == "Expiring Soon"
+
             "Expired" -> status == "Expired"
+
             else -> true
         }
 
         matchesSearch && matchesFilter
     }
 
+    // Pantry screen layout
     Scaffold(
+
         containerColor = Cream,
+
+        // Add food floating action button
         floatingActionButton = {
-            // Add food button
+
             FloatingActionButton(
                 onClick = onAddFood,
                 containerColor = DarkGreen,
                 contentColor = Color.White
             ) {
+
                 Icon(
-                    Icons.Default.Add,
+                    imageVector = Icons.Default.Add,
                     contentDescription = "Add Food"
                 )
             }
         },
+
+        // Top app bar
         topBar = {
-            // top bar
+
             TopAppBar(
+
                 title = {
+
                     Text(
-                        "My Pantry",
+                        text = "My Pantry",
                         color = DarkGreen
                     )
                 },
+
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Cream
                 )
             )
         }
+
     ) { padding ->
 
-        // Arrange pantry content
+        // Pantry content
         Column(
+
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .padding(16.dp)
+
         ) {
+
             // Search food items
             OutlinedTextField(
+
                 value = searchText,
-                onValueChange = { searchText = it },
-                label = { Text("Search food") },
+
+                onValueChange = {
+                    searchText = it
+                },
+
+                label = {
+                    Text("Search food")
+                },
+
                 modifier = Modifier.fillMaxWidth(),
+
                 singleLine = true,
+
                 shape = RoundedCornerShape(12.dp)
             )
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(
+                modifier = Modifier.height(12.dp)
+            )
 
-            // Show filter heading
+            // Filter heading
             Text(
-                "Filter by expiry status",
+                text = "Filter by expiry status",
                 color = TextGreen
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(
+                modifier = Modifier.height(8.dp)
+            )
 
-            // Scroll filter options
+            // Expiry filter options
             Row(
+
                 modifier = Modifier.horizontalScroll(
                     rememberScrollState()
                 ),
+
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
+
             ) {
+
                 listOf(
                     "All",
                     "Fresh",
@@ -137,57 +192,81 @@ fun PantryScreen(
                     "Expired"
                 ).forEach { filter ->
 
-                    // Select expiry filter
                     FilterChip(
+
                         selected = selectedFilter == filter,
-                        onClick = { selectedFilter = filter },
-                        label = { Text(filter) }
+
+                        onClick = {
+                            selectedFilter = filter
+                        },
+
+                        label = {
+                            Text(filter)
+                        }
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(
+                modifier = Modifier.height(16.dp)
+            )
 
-            // Show item count
+            // Display filtered food count
             Text(
-                "Food items: ${filteredItems.size}",
+                text = "Food items: ${filteredItems.size}",
                 color = DarkGreen,
                 style = MaterialTheme.typography.titleMedium
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(
+                modifier = Modifier.height(8.dp)
+            )
 
-            // Display pantry items
+            // Display food items or empty message
             if (filteredItems.isEmpty()) {
 
-                // Show empty message
                 Box(
+
                     modifier = Modifier.fillMaxSize(),
+
                     contentAlignment = Alignment.Center
+
                 ) {
+
                     Text(
-                        "No food items found.",
+                        text = "No food items found.",
                         color = TextGreen
                     )
                 }
 
             } else {
 
-                // List food items
+                // Display food items in a scrollable list
                 LazyColumn(
+
                     verticalArrangement = Arrangement.spacedBy(12.dp)
+
                 ) {
+
                     items(
+
                         items = filteredItems,
+
                         key = { it.id }
+
                     ) { food ->
 
-                        // Display food card
+                        // Individual food card
                         FoodItemCard(
+
                             food = food,
-                            onEdit = { onEditFood(food) },
+
+                            onEdit = {
+                                onEditFood(food)
+                            },
+
                             onDelete = {
-                                foodViewModel.deleteFood(food)
+                                foodToDelete = food
                             }
                         )
                     }
@@ -195,8 +274,56 @@ fun PantryScreen(
             }
         }
     }
+
+    // Delete confirmation dialog
+    foodToDelete?.let { food ->
+        AlertDialog(
+            onDismissRequest = {
+                foodToDelete = null
+            },
+
+            title = {
+                Text("Delete Food")
+            },
+
+            text = {
+                Text(
+                    "Are you sure you want to delete ${food.name}?"
+                )
+            },
+
+            // Confirm delete
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        foodViewModel.deleteFood(food)
+                        foodToDelete = null
+                    }
+
+                ) {
+
+                    Text(
+                        text = "Delete",
+                        color = Color(0xFFB3261E)
+                    )
+                }
+            },
+
+            // Cancel delete
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        foodToDelete = null
+                    }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 }
 
+// Individual Food Item Card
 @Composable
 fun FoodItemCard(
     food: FoodItem,
@@ -204,84 +331,133 @@ fun FoodItemCard(
     onDelete: () -> Unit
 ) {
 
-    // Get expiry status
+    // Get food expiry status
     val status = getExpiryStatus(food.expiryDate)
 
-    // Set status color
+    // Set expiry status color
     val statusColor = when (status) {
         "Fresh" -> Color(0xFF2E7D32)
         "Expiring Soon" -> Color(0xFFEF8C00)
-        else -> Color(0xFFB3261E)
+        "Expired" -> Color(0xFFB3261E)
+        else -> Color.Gray
     }
 
-    // Create food card
+    // Select local image first, then cloud image
+    val imageModel = remember(
+        food.imagePath,
+        food.imageUrl
+    ) {
+        val localFile = food.imagePath
+            ?.let { File(it) }
+            ?.takeIf { it.exists() }
+        localFile ?: food.imageUrl
+    }
+
+    // Food card layout
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(
             containerColor = Color.White
         )
+
     ) {
-        // Arrange food details
+
         Column(
             modifier = Modifier.padding(16.dp)
         ) {
-            // Display food information
+
+            // Display food image when available
+            if (imageModel != null) {
+                AsyncImage(
+                    model = imageModel,
+                    contentDescription = "Image of ${food.name}",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(170.dp),
+                    contentScale = ContentScale.Crop
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            // Food details and expiry status
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
             ) {
+
                 Column(
                     modifier = Modifier.weight(1f)
                 ) {
+
+                    // Display food name
                     Text(
-                        food.name,
+                        text = food.name,
                         style = MaterialTheme.typography.titleMedium,
                         color = DarkGreen
                     )
 
-                    // Show food quantity
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // Display food quantity
                     Text(
-                        "Quantity: ${food.quantity}",
+                        text = "Quantity: ${food.quantity}",
                         color = TextGreen
                     )
 
-                    // Show expiry date
+                    // Display expiry date
                     Text(
-                        "Expiry: ${food.expiryDate}",
+                        text = "Expiry: ${food.expiryDate}",
                         color = TextGreen
                     )
                 }
 
-                // Show expiry status
-                Text(
-                    status,
-                    color = statusColor,
-                    style = MaterialTheme.typography.labelMedium
-                )
+                // Expiry status label
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = statusColor.copy(alpha = 0.12f)
+                ) {
+                    Text(
+                        text = status,
+                        color = statusColor,
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(
+                            horizontal = 10.dp,
+                            vertical = 6.dp
+                        )
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Arrange action buttons
+            // Food action buttons
             Row(
                 horizontalArrangement = Arrangement.End,
                 modifier = Modifier.fillMaxWidth()
+
             ) {
-                // Edit food item
-                IconButton(onClick = onEdit) {
+
+                // Edit food button
+                IconButton(
+                    onClick = onEdit
+                ) {
                     Icon(
-                        Icons.Default.Edit,
-                        contentDescription = "Edit",
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = "Edit Food",
                         tint = DarkGreen
                     )
                 }
 
-                // Delete food item
-                IconButton(onClick = onDelete) {
+                // Delete food button
+                IconButton(
+                    onClick = onDelete
+                ) {
                     Icon(
-                        Icons.Default.Delete,
-                        contentDescription = "Delete",
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Delete Food",
                         tint = Color(0xFFB3261E)
                     )
                 }
@@ -290,43 +466,47 @@ fun FoodItemCard(
     }
 }
 
-// Check expiry status
+
+// Check food expiry status
 fun getExpiryStatus(expiryDate: String): String {
+
     return try {
-        // Create date formatter
+        // Parse expiry date
         val format = SimpleDateFormat(
             "yyyy-MM-dd",
             Locale.US
         )
+
         format.isLenient = false
-        val expiry = format.parse(expiryDate) ?: return "Unknown"
 
-        // Get current date
-        val today = java.util.Calendar.getInstance().apply {
-            set(
-                java.util.Calendar.HOUR_OF_DAY,
-                0
-            )
-            set(java.util.Calendar.MINUTE, 0)
-            set(java.util.Calendar.SECOND, 0)
-            set(java.util.Calendar.MILLISECOND, 0)
+        val expiry = format.parse(expiryDate)
+            ?: return "Unknown"
+
+        // Get today's date at midnight
+        val today = Calendar.getInstance().apply {
+
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
         }
 
-        // Prepare expiry date
-        val expiryCalendar = java.util.Calendar.getInstance().apply {
+        // Prepare expiry date at midnight
+        val expiryCalendar = Calendar.getInstance().apply {
             time = expiry
-            set(java.util.Calendar.HOUR_OF_DAY, 0)
-            set(java.util.Calendar.MINUTE, 0)
-            set(java.util.Calendar.SECOND, 0)
-            set(java.util.Calendar.MILLISECOND, 0)
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
         }
 
-        // Calculate day difference
+        // Calculate remaining days
         val days = (
-                expiryCalendar.timeInMillis - today.timeInMillis
+                expiryCalendar.timeInMillis -
+                        today.timeInMillis
                 ) / (24 * 60 * 60 * 1000)
 
-        // Determine food status
+        // Determine expiry status
         when {
             days < 0 -> "Expired"
             days <= 3 -> "Expiring Soon"
@@ -335,5 +515,319 @@ fun getExpiryStatus(expiryDate: String): String {
 
     } catch (e: Exception) {
         "Unknown"
+    }
+}
+
+
+// Android Studio Pantry Screen Preview
+@OptIn(ExperimentalMaterial3Api::class)
+@Preview(
+    showBackground = true,
+    showSystemUi = true,
+    name = "FoodSave Pantry Preview"
+)
+@Composable
+fun PantryScreenPreview() {
+
+    MaterialTheme {
+
+        // Preview-only Pantry UI
+        Scaffold(
+
+            containerColor = Cream,
+
+            // Preview top bar
+            topBar = {
+
+                TopAppBar(
+
+                    title = {
+
+                        Text(
+                            text = "My Pantry",
+                            color = DarkGreen
+                        )
+                    },
+
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Cream
+                    )
+                )
+            },
+
+            // Preview add button
+            floatingActionButton = {
+
+                FloatingActionButton(
+
+                    onClick = {},
+
+                    containerColor = DarkGreen,
+
+                    contentColor = Color.White
+
+                ) {
+
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Add Food"
+                    )
+                }
+            }
+
+        ) { padding ->
+
+            Column(
+
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(16.dp)
+
+            ) {
+
+                // Preview search field
+                OutlinedTextField(
+
+                    value = "",
+
+                    onValueChange = {},
+
+                    label = {
+                        Text("Search food")
+                    },
+
+                    modifier = Modifier.fillMaxWidth(),
+
+                    singleLine = true,
+
+                    shape = RoundedCornerShape(12.dp)
+                )
+
+                Spacer(
+                    modifier = Modifier.height(12.dp)
+                )
+
+                // Preview filter heading
+                Text(
+                    text = "Filter by expiry status",
+                    color = TextGreen
+                )
+
+                Spacer(
+                    modifier = Modifier.height(8.dp)
+                )
+
+                // Preview filter chips
+                Row(
+
+                    modifier = Modifier.horizontalScroll(
+                        rememberScrollState()
+                    ),
+
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+
+                ) {
+
+                    listOf(
+                        "All",
+                        "Fresh",
+                        "Expiring Soon",
+                        "Expired"
+                    ).forEach { filter ->
+
+                        FilterChip(
+
+                            selected = filter == "All",
+
+                            onClick = {},
+
+                            label = {
+                                Text(filter)
+                            }
+                        )
+                    }
+                }
+
+                Spacer(
+                    modifier = Modifier.height(16.dp)
+                )
+
+                // Preview food count
+                Text(
+                    text = "Food items: 3",
+                    color = DarkGreen,
+                    style = MaterialTheme.typography.titleMedium
+                )
+
+                Spacer(
+                    modifier = Modifier.height(8.dp)
+                )
+
+                // Preview sample food cards
+                LazyColumn(
+
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+
+                ) {
+
+                    item {
+
+                        PantryPreviewFoodCard(
+                            name = "Rice",
+                            quantity = "5 kg",
+                            expiryDate = "2027-01-15",
+                            status = "Fresh",
+                            statusColor = Color(0xFF2E7D32)
+                        )
+                    }
+
+                    item {
+
+                        PantryPreviewFoodCard(
+                            name = "Milk",
+                            quantity = "2 litres",
+                            expiryDate = "2026-11-27",
+                            status = "Expiring Soon",
+                            statusColor = Color(0xFFEF8C00)
+                        )
+                    }
+
+                    item {
+
+                        PantryPreviewFoodCard(
+                            name = "Bread",
+                            quantity = "1 packet",
+                            expiryDate = "2026-11-20",
+                            status = "Expired",
+                            statusColor = Color(0xFFB3261E)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+// Preview-only food card
+@Composable
+private fun PantryPreviewFoodCard(
+    name: String,
+    quantity: String,
+    expiryDate: String,
+    status: String,
+    statusColor: Color
+) {
+
+    Card(
+
+        modifier = Modifier.fillMaxWidth(),
+
+        shape = RoundedCornerShape(14.dp),
+
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White
+        )
+
+    ) {
+
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+
+            // Food details
+            Row(
+
+                modifier = Modifier.fillMaxWidth(),
+
+                horizontalArrangement = Arrangement.SpaceBetween,
+
+                verticalAlignment = Alignment.Top
+
+            ) {
+
+                Column(
+                    modifier = Modifier.weight(1f)
+                ) {
+
+                    Text(
+                        text = name,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = DarkGreen
+                    )
+
+                    Spacer(
+                        modifier = Modifier.height(4.dp)
+                    )
+
+                    Text(
+                        text = "Quantity: $quantity",
+                        color = TextGreen
+                    )
+
+                    Text(
+                        text = "Expiry: $expiryDate",
+                        color = TextGreen
+                    )
+                }
+
+                // Sample expiry status
+                Surface(
+
+                    shape = RoundedCornerShape(8.dp),
+
+                    color = statusColor.copy(alpha = 0.12f)
+
+                ) {
+
+                    Text(
+
+                        text = status,
+
+                        color = statusColor,
+
+                        style = MaterialTheme.typography.labelMedium,
+
+                        modifier = Modifier.padding(
+                            horizontal = 10.dp,
+                            vertical = 6.dp
+                        )
+                    )
+                }
+            }
+
+            Spacer(
+                modifier = Modifier.height(8.dp)
+            )
+
+            // Preview action buttons
+            Row(
+
+                horizontalArrangement = Arrangement.End,
+
+                modifier = Modifier.fillMaxWidth()
+
+            ) {
+
+                IconButton(onClick = {}) {
+
+                    Icon(
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = "Edit Food",
+                        tint = DarkGreen
+                    )
+                }
+
+                IconButton(onClick = {}) {
+
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Delete Food",
+                        tint = Color(0xFFB3261E)
+                    )
+                }
+            }
+        }
     }
 }

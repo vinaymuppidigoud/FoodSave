@@ -1,11 +1,21 @@
 package com.example.foodsave.viewmodel
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.Constraints
+import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.workDataOf
+import com.example.foodsave.camera.FoodImageManager
 import com.example.foodsave.data.FoodDatabase
 import com.example.foodsave.data.FoodItem
 import com.example.foodsave.data.FoodRepository
+import com.example.foodsave.notifications.ExpiryReminderWorker
+import com.example.foodsave.workers.FoodSyncWorker
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,87 +24,109 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 
-// Food screen ViewModel
 class FoodViewModel(application: Application) :
     AndroidViewModel(application) {
 
     private val repository: FoodRepository
 
-    private val auth: FirebaseAuth = FirebaseAuth.getInstance()
+    private val auth = FirebaseAuth.getInstance()
 
-    // Current user ID
+    private val workManager =
+        WorkManager.getInstance(application)
+
+    // Get current user
     private val userId: String
         get() = auth.currentUser?.uid ?: ""
 
-    // Food items state
+    // Store food items
     private val _foodItems =
         MutableStateFlow<List<FoodItem>>(emptyList())
 
     val foodItems: StateFlow<List<FoodItem>> =
         _foodItems.asStateFlow()
 
-    // Error message state
+    // Store error messages
     private val _errorMessage =
         MutableStateFlow<String?>(null)
 
     val errorMessage: StateFlow<String?> =
         _errorMessage.asStateFlow()
 
-    // Collection job
     private var foodCollectionJob: Job? = null
 
+    // Track authentication changes
+    private val authListener =
+        FirebaseAuth.AuthStateListener { firebaseAuth ->
+
+            loadFood()
+
+            if (firebaseAuth.currentUser != null) {
+                scheduleExpiryReminders()
+                syncFood()
+            }
+        }
+
     init {
+
+        // Initialise database
         val dao = FoodDatabase
             .getDatabase(application)
             .foodDao()
 
         repository = FoodRepository(dao)
 
-        // Load saved food
-        loadFood()
+        // Register auth listener
+        auth.addAuthStateListener(authListener)
     }
 
-    // Refresh food list
-    fun refreshFood() {
-        loadFood()
-    }
-
-    // Load user food
+    // Load user's food
     private fun loadFood() {
         val currentUserId = userId
-
-        // Cancel previous job
         foodCollectionJob?.cancel()
-
-        // Clear old data
         _foodItems.value = emptyList()
-
-        if (currentUserId.isBlank()) {
-            return
-        }
-
+        if (currentUserId.isBlank()) return
         foodCollectionJob = viewModelScope.launch {
+
             try {
-                repository.getAllFood(currentUserId).collect { items ->
-                    // Check current user
-                    if (userId == currentUserId) {
-                        _foodItems.value = items
+
+                repository.getAllFood(currentUserId)
+                    .collect { items ->
+
+                        if (userId == currentUserId) {
+                            _foodItems.value = items
+                        }
                     }
-                }
+
             } catch (e: Exception) {
+
+                Log.e(
+                    "FoodViewModel",
+                    "Unable to load food items",
+                    e
+                )
                 _errorMessage.value =
                     "Unable to load food items."
             }
         }
     }
 
-    // Add food item
+    // Refresh food
+    fun refreshFood() {
+        loadFood()
+        scheduleExpiryReminders()
+        syncFood()
+    }
+
+    // Add new food
     fun addFood(
         name: String,
         quantity: Int,
-        expiryDate: String
+        expiryDate: String,
+        imagePath: String? = null
     ) {
+
         val currentUserId = userId
 
         if (currentUserId.isBlank()) {
@@ -102,42 +134,56 @@ class FoodViewModel(application: Application) :
             return
         }
 
-        if (name.isBlank() || quantity <= 0) {
+        // Check food details
+        if (
+            name.isBlank() ||
+            quantity <= 0 ||
+            !isValidDate(expiryDate)
+        ) {
             _errorMessage.value =
-                "Enter a valid food name and quantity."
-            return
-        }
-
-        if (!isValidDate(expiryDate)) {
-            _errorMessage.value =
-                "Enter expiry date as yyyy-MM-dd."
+                "Enter valid food details."
             return
         }
 
         viewModelScope.launch {
+
             try {
+                // Save food locally
                 repository.insertFood(
                     FoodItem(
                         userId = currentUserId,
                         name = name.trim(),
                         quantity = quantity,
-                        expiryDate = expiryDate
+                        expiryDate = expiryDate,
+                        imagePath = imagePath,
+                        isSynced = false
                     )
                 )
-
                 _errorMessage.value = null
+                syncFood()
+                scheduleExpiryReminders()
+
             } catch (e: Exception) {
+
+                Log.e(
+                    "FoodViewModel",
+                    "Food insert failed",
+                    e
+                )
                 _errorMessage.value =
                     "Unable to save food item."
             }
         }
     }
 
-    // Update food item
+    // Update food
     fun updateFood(food: FoodItem) {
+
         val currentUserId = userId
 
-        if (currentUserId.isBlank() ||
+        // Check user access
+        if (
+            currentUserId.isBlank() ||
             food.userId != currentUserId
         ) {
             _errorMessage.value =
@@ -145,7 +191,9 @@ class FoodViewModel(application: Application) :
             return
         }
 
-        if (food.name.isBlank() ||
+        // Validate food details
+        if (
+            food.name.isBlank() ||
             food.quantity <= 0 ||
             !isValidDate(food.expiryDate)
         ) {
@@ -156,23 +204,53 @@ class FoodViewModel(application: Application) :
 
         viewModelScope.launch {
             try {
+                val existingFood = _foodItems.value
+                    .find { it.id == food.id }
+
+                // Save updated food
                 repository.updateFood(
-                    food.copy(name = food.name.trim())
+                    food.copy(
+                        name = food.name.trim(),
+                        isSynced = false,
+                        isDeleted = false
+                    )
                 )
 
+                // Remove old image
+                if (
+                    existingFood?.imagePath != null &&
+                    existingFood.imagePath != food.imagePath
+                ) {
+
+                    FoodImageManager.deleteImage(
+                        existingFood.imagePath
+                    )
+                }
                 _errorMessage.value = null
+                syncFood()
+                scheduleExpiryReminders()
+
             } catch (e: Exception) {
+
+                Log.e(
+                    "FoodViewModel",
+                    "Food update failed",
+                    e
+                )
                 _errorMessage.value =
                     "Unable to update food item."
             }
         }
     }
 
-    // Delete food item
+    // Delete food
     fun deleteFood(food: FoodItem) {
+
         val currentUserId = userId
 
-        if (currentUserId.isBlank() ||
+        // Check user access
+        if (
+            currentUserId.isBlank() ||
             food.userId != currentUserId
         ) {
             _errorMessage.value =
@@ -182,29 +260,119 @@ class FoodViewModel(application: Application) :
 
         viewModelScope.launch {
             try {
+
+                // Remove food locally
                 repository.deleteFood(food)
+
+                // Delete stored image
+                food.imagePath?.let { path ->
+                    FoodImageManager.deleteImage(path)
+                }
                 _errorMessage.value = null
+                syncFood()
+                scheduleExpiryReminders()
+
             } catch (e: Exception) {
+
+                Log.e(
+                    "FoodViewModel",
+                    "Food deletion failed",
+                    e
+                )
                 _errorMessage.value =
                     "Unable to delete food item."
             }
         }
     }
 
-    // Validate expiry date
+    // Schedule cloud sync
+    fun syncFood() {
+
+        val currentUserId = userId
+
+        if (currentUserId.isBlank()) {
+
+            Log.e(
+                "FoodViewModel",
+                "Sync cancelled: User not logged in"
+            )
+
+            return
+        }
+
+        // Require network access
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+
+        // Create sync request
+        val request =
+            OneTimeWorkRequestBuilder<FoodSyncWorker>()
+                .setConstraints(constraints)
+                .setInputData(
+                    workDataOf("userId" to currentUserId)
+                )
+                .build()
+
+        // Queue sync work
+        workManager.enqueueUniqueWork(
+            "foodsave_sync_$currentUserId",
+            ExistingWorkPolicy.APPEND_OR_REPLACE,
+            request
+        )
+
+        Log.d(
+            "FoodViewModel",
+            "Sync request enqueued for $currentUserId"
+        )
+    }
+
+    // Schedule expiry checks
+    fun scheduleExpiryReminders() {
+
+        val currentUserId = userId
+
+        if (currentUserId.isBlank()) return
+
+        // Cancel previous reminder
+        workManager.cancelUniqueWork(
+            "foodsave_expiry_reminders"
+        )
+
+        // Create reminder request
+        val request =
+            OneTimeWorkRequestBuilder<ExpiryReminderWorker>()
+                .setInitialDelay(2, TimeUnit.MINUTES)
+                .setInputData(
+                    workDataOf("userId" to currentUserId)
+                )
+                .build()
+
+        // Queue reminder work
+        workManager.enqueueUniqueWork(
+            "foodsave_expiry_reminders_$currentUserId",
+            ExistingWorkPolicy.KEEP,
+            request
+        )
+        Log.d(
+            "FoodViewModel",
+            "Expiry reminder scheduled for $currentUserId"
+        )
+    }
+
+    // Check date format
     private fun isValidDate(date: String): Boolean {
+
         return try {
             val formatter = SimpleDateFormat(
                 "yyyy-MM-dd",
                 Locale.US
             )
-
             formatter.isLenient = false
+            val parsed = formatter.parse(date)
+            parsed != null &&
+                    formatter.format(parsed) == date
 
-            val parsedDate = formatter.parse(date)
-
-            parsedDate != null &&
-                    formatter.format(parsedDate) == date
         } catch (e: Exception) {
             false
         }
@@ -215,9 +383,10 @@ class FoodViewModel(application: Application) :
         _errorMessage.value = null
     }
 
-    // Clear ViewModel
+    // Clean up resources
     override fun onCleared() {
         foodCollectionJob?.cancel()
+        auth.removeAuthStateListener(authListener)
         super.onCleared()
     }
 }

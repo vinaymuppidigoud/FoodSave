@@ -36,20 +36,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.foodsave.R
 import com.example.foodsave.viewmodel.AuthViewModel
 
-// colour palette
+// colours
 private val FoodSaveDarkGreen = Color(0xFF075B2A)
 private val FoodSaveGreen = Color(0xFF35A936)
 private val FoodSaveCream = Color(0xFFF8FCF4)
 private val FoodSaveText = Color(0xFF173B25)
 private val FoodSaveError = Color(0xFFB3261E)
 
-// Login screen
+// Main Login Screen
 @Composable
 fun LoginScreen(
     onLoginSuccess: () -> Unit,
@@ -57,20 +58,58 @@ fun LoginScreen(
     authViewModel: AuthViewModel = viewModel()
 ) {
 
-    // Store login details
-    var email by remember {
-        mutableStateOf("")
-    }
+    // Store email and password entered by the user
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
 
-    var password by remember {
-        mutableStateOf("")
-    }
-
-    // Get authentication state
+    // Observe authentication state from AuthViewModel
     val errorMessage by authViewModel.errorMessage
     val isLoading by authViewModel.isLoading
 
-    // screen layout
+    // Display the login UI
+    LoginScreenContent(
+        email = email,
+        password = password,
+        errorMessage = errorMessage,
+        isLoading = isLoading,
+
+        onEmailChange = {
+            email = it
+        },
+
+        onPasswordChange = {
+            password = it
+        },
+
+        onLoginClick = {
+            // Prevent login when fields are empty
+            if (email.isNotBlank() && password.isNotBlank()) {
+                authViewModel.login(
+                    email = email,
+                    password = password,
+                    onSuccess = onLoginSuccess
+                )
+            }
+        },
+
+        onRegisterClick = onRegisterClick
+    )
+}
+
+// Login UI
+@Composable
+fun LoginScreenContent(
+    email: String,
+    password: String,
+    errorMessage: String?,
+    isLoading: Boolean,
+    onEmailChange: (String) -> Unit,
+    onPasswordChange: (String) -> Unit,
+    onLoginClick: () -> Unit,
+    onRegisterClick: () -> Unit
+) {
+
+    // Main screen layout
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -78,15 +117,12 @@ fun LoginScreen(
             .padding(horizontal = 28.dp),
 
         horizontalAlignment = Alignment.CenterHorizontally,
-
         verticalArrangement = Arrangement.Center
     ) {
 
         // FoodSave logo
         Image(
-            painter = painterResource(
-                id = R.drawable.logo
-            ),
+            painter = painterResource(id = R.drawable.logo),
             contentDescription = "FoodSave Logo",
             modifier = Modifier.size(110.dp)
         )
@@ -118,20 +154,14 @@ fun LoginScreen(
 
         Spacer(modifier = Modifier.height(28.dp))
 
-        // Email field
+        // Email input field
         OutlinedTextField(
             value = email,
-
-            onValueChange = {
-                email = it
-            },
-
+            onValueChange = onEmailChange,
             modifier = Modifier.fillMaxWidth(),
-
             label = {
                 Text("Email address")
             },
-
             leadingIcon = {
                 Icon(
                     imageVector = Icons.Default.Email,
@@ -139,11 +169,8 @@ fun LoginScreen(
                     tint = FoodSaveGreen
                 )
             },
-
             singleLine = true,
-
             shape = RoundedCornerShape(14.dp),
-
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = FoodSaveGreen,
                 unfocusedBorderColor = Color(0xFFB8CDBB),
@@ -155,20 +182,14 @@ fun LoginScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Password field
+        // Password input field
         OutlinedTextField(
             value = password,
-
-            onValueChange = {
-                password = it
-            },
-
+            onValueChange = onPasswordChange,
             modifier = Modifier.fillMaxWidth(),
-
             label = {
                 Text("Password")
             },
-
             leadingIcon = {
                 Icon(
                     imageVector = Icons.Default.Lock,
@@ -176,11 +197,8 @@ fun LoginScreen(
                     tint = FoodSaveGreen
                 )
             },
-
             singleLine = true,
-
             shape = RoundedCornerShape(14.dp),
-
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = FoodSaveGreen,
                 unfocusedBorderColor = Color(0xFFB8CDBB),
@@ -190,13 +208,13 @@ fun LoginScreen(
             )
         )
 
-        // Firebase error message
+        // Display Firebase authentication error
         if (errorMessage != null) {
 
             Spacer(modifier = Modifier.height(10.dp))
 
             Text(
-                text = errorMessage ?: "",
+                text = errorMessage,
                 color = FoodSaveError,
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.fillMaxWidth()
@@ -207,29 +225,12 @@ fun LoginScreen(
 
         // Login button
         Button(
-            onClick = {
-                if (
-                    email.isBlank() ||
-                    password.isBlank()
-                ) {
-                    return@Button
-                }
-
-                authViewModel.login(
-                    email = email,
-                    password = password,
-                    onSuccess = onLoginSuccess
-                )
-            },
-
+            onClick = onLoginClick,
             enabled = !isLoading,
-
             modifier = Modifier
                 .fillMaxWidth()
                 .height(54.dp),
-
             shape = RoundedCornerShape(14.dp),
-
             colors = ButtonDefaults.buttonColors(
                 containerColor = FoodSaveDarkGreen,
                 contentColor = Color.White,
@@ -237,7 +238,7 @@ fun LoginScreen(
             )
         ) {
 
-            // Show loading state
+            // Show loading indicator while logging in
             if (isLoading) {
 
                 CircularProgressIndicator(
@@ -288,5 +289,29 @@ fun LoginScreen(
                 )
             }
         }
+    }
+}
+
+// Android Studio Preview
+@Preview(
+    showBackground = true,
+    showSystemUi = true,
+    name = "FoodSave Login Screen"
+)
+@Composable
+fun LoginScreenPreview() {
+
+    MaterialTheme {
+
+        LoginScreenContent(
+            email = "test@example.com",
+            password = "password123",
+            errorMessage = null,
+            isLoading = false,
+            onEmailChange = {},
+            onPasswordChange = {},
+            onLoginClick = {},
+            onRegisterClick = {}
+        )
     }
 }
